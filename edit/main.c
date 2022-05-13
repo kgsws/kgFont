@@ -195,7 +195,7 @@ char *UTF8(char *in, uint16_t *code)
 
 	if(!*in)
 	{
-		code = 0;
+		*code = 0;
 		return in;
 	}
 
@@ -1030,6 +1030,7 @@ void export_bin()
 	// prepare header
 	head.id = KFN_ID;
 	head.format = 0;
+	head.reserved = 0;
 	head.line_height = font_height;
 	head.num_ranges = 0;
 
@@ -1040,17 +1041,14 @@ void export_bin()
 	last = charlist->code;
 	znak = charlist;
 	temp = charlist;
-	while(znak)
+	while(1)
 	{
-		if(znak->code != last || !znak->next)
+		if(znak->code != last)
 		{
 			kfn_range_t range;
 			// mark this range
 			range.first = temp->code;
-			if(znak->next)
-				range.count = 1 + znak->prev->code - temp->code;
-			else
-				range.count = 1 + znak->code - temp->code;
+			range.count = 1 + znak->prev->code - temp->code;
 			head.num_ranges++;
 			pixs += sizeof(kfn_range_t) + range.count * sizeof(kfn_cinfo_t);
 			// mark all characters
@@ -1064,6 +1062,26 @@ void export_bin()
 			temp = znak;
 		}
 		last = znak->code + 1;
+
+		if(!znak->next)
+		{
+			kfn_range_t range;
+			// mark this range
+			range.first = temp->code;
+			range.count = 1 + znak->code - temp->code;
+			head.num_ranges++;
+			pixs += sizeof(kfn_range_t) + range.count * sizeof(kfn_cinfo_t);
+			// mark all characters
+			for(i = 0; i < range.count; i++)
+			{
+				temp->pixo = pixo;
+				pixo += temp->width * temp->height;
+				temp = temp->next;
+			}
+			// done
+			break;
+		}
+
 		znak = znak->next;
 	}
 
@@ -1083,17 +1101,14 @@ void export_bin()
 	last = charlist->code;
 	znak = charlist;
 	temp = charlist;
-	while(znak)
+	while(1)
 	{
-		if(znak->code != last || !znak->next)
+		if(znak->code != last)
 		{
 			kfn_range_t range;
 			// store this range
 			range.first = temp->code;
-			if(znak->next)
-				range.count = 1 + znak->prev->code - temp->code;
-			else
-				range.count = 1 + znak->code - temp->code;
+			range.count = 1 + znak->prev->code - temp->code;
 			fwrite(&range, 1, sizeof(kfn_range_t), f);
 			// store all characters
 			for(i = 0; i < range.count; i++)
@@ -1115,6 +1130,34 @@ void export_bin()
 			temp = znak;
 		}
 		last = znak->code + 1;
+
+		if(!znak->next)
+		{
+			kfn_range_t range;
+			// store this range
+			range.first = temp->code;
+			range.count = 1 + znak->code - temp->code;
+			fwrite(&range, 1, sizeof(kfn_range_t), f);
+			// store all characters
+			for(i = 0; i < range.count; i++)
+			{
+				kfn_cinfo_t info;
+
+				info.w = temp->width;
+				info.h = temp->height;
+				info.x = temp->xoffs;
+				info.y = temp->yoffs;
+				info.s = temp->space;
+				info.pixo = temp->pixo + pixs;
+
+				fwrite(&info, 1, sizeof(kfn_cinfo_t), f);
+
+				temp = temp->next;
+			}
+			// done
+			break;
+		}
+
 		znak = znak->next;
 	}
 
